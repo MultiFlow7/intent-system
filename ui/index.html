@@ -200,7 +200,7 @@ const min = 60_000, hour = 60 * min, day = 24 * hour;
 
 const state = {
   page: (['overview', 'sources', 'settings'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'overview'),
-  apps: { claude: false, codex: false },
+  apps: { claude: false, codex: false, proma: false },
   prewarm: { available: false },
   armed: null,            // 两步确认中的按钮 id
   expanded: null,         // 来源页展开的项目
@@ -223,6 +223,13 @@ const state = {
         { path: '~/Projects/demo', count: 1630, sessions: 120, last: now - 25 * min, excluded: false },
         { path: '~/Documents/repo/local-llm-gateway', count: 1410, sessions: 118, last: now - 5 * day, excluded: false },
         { path: '~/Documents/repo/memory-bench', count: 840, sessions: 74, last: now - 24 * day, excluded: false },
+      ] },
+    { id: 'proma', name: 'Proma', ico: 'P', color: '#0f766e', root: '~/.proma/agent-sessions', enabled: false, consent: 'unasked',
+      sessions: 96, imported: 0, total: 1240, lastSync: null, importing: null, syncing: null, error: null,
+      projects: [
+        { path: '意图', count: 620, sessions: 41, last: now - 3 * hour, excluded: false },
+        { path: 'obsidian', count: 380, sessions: 33, last: now - 2 * day, excluded: false },
+        { path: '（无项目目录）', count: 240, sessions: 22, last: now - 6 * day, excluded: false },
       ] },
     { id: 'orbita', name: 'Orbita', ico: 'O', color: '#1d4ed8', root: '经 /import + /ingest 推送', enabled: true, consent: 'yes',
       sessions: 14, imported: 62, total: 62, lastSync: now - 6 * hour, importing: null, syncing: null, error: '最近一次 /ingest 返回 HTTP 500（09:41）', push: true,
@@ -407,6 +414,14 @@ function pageOverview() {
         <div class="d">Codex 侧的接入（MCP）还没做：开关先记下，接入后生效。Codex 的对话现在已经可以作为历史被召回，见「来源」。</div>
       </div>
       <button class="switch" role="switch" aria-label="Codex 使用意图系统" aria-checked="${state.apps.codex}" data-action="app-switch" data-app="codex"></button>
+    </section>
+    <section class="card app-card">
+      <span class="src-ico" style="background:#0f766e1a;color:#0f766e">P</span>
+      <div style="flex:1;min-width:0">
+        <div class="t">Proma ${state.apps.proma ? '<span class="tag ok">开</span>' : '<span class="tag">关</span>'}<span class="tag warn">待接入</span></div>
+        <div class="d">Proma 侧的原生接入还在做：开关先记下，接入后生效。Proma 的对话现在已经可以作为历史被召回，见「来源」。</div>
+      </div>
+      <button class="switch" role="switch" aria-label="Proma 使用意图系统" aria-checked="${state.apps.proma}" data-action="app-switch" data-app="proma"></button>
     </section>
   </div>
   <h2>概况</h2>
@@ -705,6 +720,7 @@ const LIVE = { on: false, timer: null, error: null };
 const META = {
   claude: { name: 'Claude Code', ico: 'C', color: '#c96442' },
   codex: { name: 'Codex', ico: 'X', color: '#3d3d3d' },
+  proma: { name: 'Proma', ico: 'P', color: '#0f766e' },
 };
 async function api(path, body) {
   const r = await fetch(path, body === undefined ? {} : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
@@ -767,7 +783,7 @@ async function refreshLive(announce) {
 const fmtMs = ms => (ms === undefined ? undefined : dur(ms));
 function mapRecalls(rows) {
   return rows.map(r => {
-    const app = r.sessionId.startsWith('claude-') ? 'Claude' : r.sessionId.startsWith('codex-') ? 'Codex' : 'Orbita';
+    const app = r.sessionId.startsWith('claude-') ? 'Claude' : r.sessionId.startsWith('codex-') ? 'Codex' : r.sessionId.startsWith('proma-') ? 'Proma' : 'Orbita';
     if (r.status === 'done') {
       DETAIL[r.runId] = {
         scene: r.scene || '', want: r.want || '', summary: r.summary || '',
@@ -830,7 +846,9 @@ async function liveAction(a, t) {
         state.apps = (await api('/local/apps', { [app]: on })).apps;
         toast(app === 'claude'
           ? (on ? 'Claude Code：之后的新对话一开局就打开意图系统（已打开的对话不变）' : 'Claude Code：之后的新对话默认不做意图分析')
-          : (on ? 'Codex：已记下，接入后生效' : 'Codex：已关'));
+          : app === 'proma'
+            ? (on ? 'Proma：已记下，接入后生效' : 'Proma：已关')
+            : (on ? 'Codex：已记下，接入后生效' : 'Codex：已关'));
         break;
       }
       case 'endpoint-mode': state.endpointMode = t.dataset.v; render(); return true;
@@ -918,7 +936,7 @@ async function liveAction(a, t) {
         if (state.armed !== 'wipe') { state.armed = 'wipe'; render(); return true; }
         state.armed = null;
         await api('/reset', {});
-        for (const x of ['claude', 'codex']) await api('/local/clear', { source: x });
+        for (const x of ['claude', 'codex', 'proma']) await api('/local/clear', { source: x });
         toast('已清空全部数据'); break;
       }
       default: return false;

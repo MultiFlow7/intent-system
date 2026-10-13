@@ -1231,7 +1231,7 @@ async function handleLocalSources(): Promise<Response> {
 async function handleLocalSessions(url: URL): Promise<Response> {
   const id = url.searchParams.get("source");
   const project = url.searchParams.get("project");
-  if (!isLocalSource(id)) return jsonError(400, "source 必须是 claude 或 codex");
+  if (!isLocalSource(id)) return jsonError(400, "source 必须是 claude、codex 或 proma");
   const st = loadLocalState();
   const excluded = new Set(st.excludedSessions);
   const stored = storedCountBySession();
@@ -1245,7 +1245,7 @@ async function handleLocalSessions(url: URL): Promise<Response> {
 async function handleLocalPost(path: string, raw: unknown): Promise<Response> {
   const b = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const id = b.source;
-  if (!isLocalSource(id)) return jsonError(400, "source 必须是 claude 或 codex");
+  if (!isLocalSource(id)) return jsonError(400, "source 必须是 claude、codex 或 proma");
   if (path === "/local/import") {
     const mode = b.mode === "full" ? "full" : "sync";
     const job = startLocalImport(id, mode, importLocalBatch, onLocalImportDone);
@@ -1464,7 +1464,7 @@ async function handleLocalVerdicts(): Promise<Response> {
       return {
         qaId: r.qaId, slot: r.slot, slotName: slotNameOf(r.slot), verdict: r.verdict, statement: r.statement,
         edited: r.edited ?? null, note: r.note ?? null, ts: r.ts, runId: r.runId,
-        from: qa ? `${src === "claude" ? "Claude" : src === "codex" ? "Codex" : "Orbita"} · ${titleOf(qa.sessionId) || "(无标题)"} · ${fmtShort(qa.tsAbs)}` : r.qaId,
+        from: qa ? `${src === "claude" ? "Claude" : src === "codex" ? "Codex" : src === "proma" ? "Proma" : "Orbita"} · ${titleOf(qa.sessionId) || "(无标题)"} · ${fmtShort(qa.tsAbs)}` : r.qaId,
       };
     });
   return Response.json({ ok: true, verdicts });
@@ -1769,6 +1769,7 @@ async function handle(req: Request): Promise<Response> {
         const st = updateLocalState((s) => {
           if (typeof b.claude === "boolean") s.apps.claude = b.claude;
           if (typeof b.codex === "boolean") s.apps.codex = b.codex;
+          if (typeof b.proma === "boolean") s.apps.proma = b.proma;
         });
         return Response.json({ ok: true, apps: st.apps });
       }
