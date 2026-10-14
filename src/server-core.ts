@@ -1224,13 +1224,53 @@ async function handleLocalSources(): Promise<Response> {
   }
   // Orbita 推送来的（/import /ingest 的非本机行）只给条数
   let orbita = 0;
-  for (const [sid, n] of stored) if (sourceOfSession(sid) === null) orbita += n;
-  return Response.json({ ok: true, sources, orbita: { rowsStored: orbita } });
+  const pushedGroups = new Map<string, { path: string; found: number; sessions: Set<string>; lastTs: number }>();
+  for (const r of dedupeRowsOf()) {
+    if (sourceOfSession(r.sessionId) !== null) continue;
+    orbita += 1;
+    const gpath = pushedGroupOf(r.sessionId);
+    const g = pushedGroups.get(gpath) ?? { path: gpath, found: 0, sessions: new Set<string>(), lastTs: 0 };
+    g.found += 1;
+    g.sessions.add(r.sessionId);
+    g.lastTs = Math.max(g.lastTs, r.tsAbs);
+    pushedGroups.set(gpath, g);
+  }
+  const groups = [...pushedGroups.values()]
+    .map((g) => ({ path: g.path, found: g.found, sessions: g.sessions.size, lastTs: g.lastTs }))
+    .sort((a, b) => b.lastTs - a.lastTs);
+  return Response.json({ ok: true, sources, orbita: { rowsStored: orbita, groups } });
+}
+
+/** 推送行（/import /ingest，sessionId 不带本机来源前缀）的分组：管理页「推送」卡的目录 */
+export function pushedGroupOf(sessionId: string): string {
+  if (sessionId.startsWith("obsidian-")) return "Obsidian 导入";
+  return "Orbita / MCP 推送";
+}
+
+/** 推送行按会话汇总（管理页展开「推送」卡的目录时用） */
+function pushedSessionViews(): Array<{ sessionId: string; title: string; rows: number; lastTs: number }> {
+  const by = new Map<string, { sessionId: string; title: string; rows: number; lastTs: number }>();
+  for (const r of dedupeRowsOf()) {
+    if (sourceOfSession(r.sessionId) !== null) continue;
+    const cur = by.get(r.sessionId) ?? { sessionId: r.sessionId, title: "", rows: 0, lastTs: 0 };
+    cur.rows += 1;
+    if (r.title) cur.title = r.title;
+    cur.lastTs = Math.max(cur.lastTs, r.tsAbs);
+    by.set(r.sessionId, cur);
+  }
+  return [...by.values()].sort((a, b) => b.lastTs - a.lastTs);
 }
 
 async function handleLocalSessions(url: URL): Promise<Response> {
   const id = url.searchParams.get("source");
   const project = url.searchParams.get("project");
+  if (id === "orbita") {
+    // 推送卡（/import /ingest 来的行）：按会话列出，可按分组（目录）过滤
+    const sessions = pushedSessionViews()
+      .filter((s) => project === null || pushedGroupOf(s.sessionId) === project)
+      .map((s) => ({ sessionId: s.sessionId, title: s.title || "(无标题)", found: s.rows, files: 1, stored: s.rows, lastTs: s.lastTs, excluded: false }));
+    return Response.json({ ok: true, sessions });
+  }
   if (!isLocalSource(id)) return jsonError(400, "source 必须是 claude、codex 或 proma");
   const st = loadLocalState();
   const excluded = new Set(st.excludedSessions);

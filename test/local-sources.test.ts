@@ -304,6 +304,24 @@ describe("proma 来源（服务端）", () => {
   });
 });
 
+describe("推送会话的显示", () => {
+  test("/local/sources 的 orbita.groups 分组统计；/local/sessions?source=orbita 按会话列出、可按组过滤", async () => {
+    await post("/import", { rows: [
+      { sessionId: "obsidian-0013", turnId: "001", title: "画布", q: "问题一", a: "回答一", ts: 1000 },
+      { sessionId: "obsidian-0013", turnId: "002", title: "画布", q: "问题二", a: "回答二", ts: 2000 },
+      { sessionId: "chat-42", turnId: "m1", title: "Orbita 会话", q: "问题三", a: "回答三", ts: 3000 },
+    ] });
+    const r = await get("/local/sources");
+    expect(r.orbita.groups).toContainEqual({ path: "Obsidian 导入", found: 2, sessions: 1, lastTs: 2000 });
+    expect(r.orbita.groups).toContainEqual({ path: "Orbita / MCP 推送", found: 1, sessions: 1, lastTs: 3000 });
+    const all = await get("/local/sessions?source=orbita");
+    expect(all.sessions.map((x: any) => x.sessionId).sort()).toEqual(["chat-42", "obsidian-0013"]);
+    const filtered = await get("/local/sessions?source=orbita&project=" + encodeURIComponent("Obsidian 导入"));
+    expect(filtered.sessions).toHaveLength(1);
+    expect(filtered.sessions[0]).toMatchObject({ sessionId: "obsidian-0013", title: "画布", found: 2, stored: 2 });
+  });
+});
+
 describe("管理页：召回记录 / 表态 / 配置", () => {
   test("召回记录旁听事件：done 落一行摘要，门卫跳过与出错各有状态", () => {
     const req = { sessionId: "claude-x", turnId: "t1", q: "要不要换", force: false };

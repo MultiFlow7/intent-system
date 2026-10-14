@@ -204,6 +204,7 @@ const state = {
   prewarm: { available: false },
   armed: null,            // 两步确认中的按钮 id
   expanded: null,         // 来源页展开的项目
+  collapsedSrc: {},       // 来源页每个来源的项目目录是否折叠（缺省：>5 个项目自动折叠）
   recallFilter: 'all', recallSearch: '',
   verdictFilter: 'all',
   drawer: null,
@@ -231,7 +232,7 @@ const state = {
         { path: 'obsidian', count: 380, sessions: 33, last: now - 2 * day, excluded: false },
         { path: '（无项目目录）', count: 240, sessions: 22, last: now - 6 * day, excluded: false },
       ] },
-    { id: 'orbita', name: 'Orbita', ico: 'O', color: '#1d4ed8', root: '经 /import + /ingest 推送', enabled: true, consent: 'yes',
+    { id: 'orbita', name: '推送 / 导入', ico: '⇪', color: '#1d4ed8', root: '经 /import + /ingest 推送', enabled: true, consent: 'yes',
       sessions: 14, imported: 62, total: 62, lastSync: now - 6 * hour, importing: null, syncing: null, error: '最近一次 /ingest 返回 HTTP 500（09:41）', push: true,
       projects: [ { path: 'Orbita 会话', count: 62, sessions: 14, last: now - 6 * hour, excluded: false } ] },
   ],
@@ -490,12 +491,14 @@ function pageSources() {
   <div class="sources">${state.sources.map(s => {
     const has = s.imported > 0 && !s.importing;
     const armedClear = state.armed === `clear:${s.id}`;
+    const collapsed = state.collapsedSrc[s.id] ?? (s.projects.length > 5);
     return `<section class="card">
       <div class="src-head">
         <span class="src-ico" style="background:${s.color}1a;color:${s.color}">${s.ico}</span>
         <div style="min-width:0"><div class="row" style="gap:8px"><span class="src-name">${esc(s.name)}</span>${srcStatus(s)}</div>
           <div class="faint mono" style="margin-top:2px">${esc(s.root)}</div></div>
         <span class="spacer"></span>
+        ${s.projects.length ? `<button class="btn sm ghost" data-action="fold-src" data-id="${s.id}">${collapsed ? `▸ 项目 ${s.projects.length}` : '▾ 收起'}</button>` : ''}
         ${has ? `<span class="muted num" style="font-size:13px">${n(active(s))} 条 · ${s.push ? '推送' : '同步'} ${rel(s.lastSync)}</span>
           <label class="row" style="gap:8px;font-size:13px">参与召回<button class="switch" role="switch" aria-checked="${s.enabled}" data-action="toggle-src" data-id="${s.id}"></button></label>` : ''}
       </div>
@@ -516,18 +519,17 @@ function pageSources() {
           <span class="spacer"></span>
           ${!s.push && has ? `<span class="faint" style="font-size:12.5px">召回前自动增量同步 · 后台每 ${state.settings.syncEvery} 分钟</span>` : ''}
         </div>
-        <div class="tbl-wrap"><table>
+        ${collapsed ? '' : `<div class="tbl-wrap"><table>
           <thead><tr><th>项目 / 目录</th><th class="num">会话</th><th class="num">条数</th><th>最近活动</th><th></th></tr></thead>
           <tbody>${s.projects.map(p => {
-            const key = `${s.id}|${p.path}`, sess = state.sessionsOf[key] ?? (LIVE.on && !s.push ? 'lazy' : undefined), open = state.expanded === key;
-            return `<tr class="${p.excluded ? 'excluded' : ''} ${sess ? 'click' : ''}" ${sess ? `data-action="expand" data-key="${esc(key)}"` : ''}>
-              <td class="mono"><span class="faint" style="display:inline-block;width:14px">${sess ? (open ? '▾' : '▸') : ''}</span>${esc(p.path)}</td>
+            const key = `${s.id}|${p.path}`, sess = state.sessionsOf[key] ?? (LIVE.on && (!s.push || s.projects.length) ? 'lazy' : undefined), open = state.expanded === key;
+            return `<tr class="${p.excluded ? 'excluded' : ''} ${sess ? 'click' : ''}" ${sess ? `data-action="expand" data-key="${esc(key)}"` : ''}>              <td class="mono"><span class="faint" style="display:inline-block;width:14px">${sess ? (open ? '▾' : '▸') : ''}</span>${esc(p.path)}</td>
               <td class="num muted">${p.sessions || '—'}</td><td class="num">${n(p.excluded ? (p.origCount ?? p.count) : p.count)}${p.stored != null && p.stored < p.count ? `<div class="faint" style="font-size:11.5px">已入库 ${n(p.stored)}</div>` : ''}</td><td class="muted">${rel(p.last)}</td>
               <td style="text-align:right"><button class="btn sm ${p.excluded ? '' : 'ghost'}" data-action="exclude" data-src="${s.id}" data-path="${esc(p.path)}">${p.excluded ? '恢复' : '排除'}</button></td></tr>
               ${open && sess === 'lazy' ? '<tr class="sub-rows"><td colspan="5" class="faint">加载中…</td></tr>' : ''}${open && Array.isArray(sess) ? sess.map((x, i) => `<tr class="sub-rows ${x.excluded ? 'excluded' : ''}"><td>${esc(x.title)}</td><td></td><td class="num">${x.count}${x.stored != null && x.stored < x.count ? ` <span class="faint">(${x.stored})</span>` : ''}</td><td class="muted">${rel(x.last)}</td>
                 <td style="text-align:right"><button class="btn sm ${x.excluded ? '' : 'ghost'}" data-action="exclude-session" data-key="${esc(key)}" data-i="${i}">${x.excluded ? '恢复' : '排除'}</button></td></tr>`).join('') : ''}`;
           }).join('')}</tbody>
-        </table></div>
+        </table></div>`}
       </div>
     </section>`;
   }).join('')}</div>`;
@@ -744,9 +746,10 @@ function mapLive(r) {
       _job: job,
     };
   });
-  list.push({ id: 'orbita', name: 'Orbita', ico: 'O', color: '#1d4ed8', root: '经 /import + /ingest 推送', enabled: true, consent: 'yes',
+  list.push({ id: 'orbita', name: '推送 / 导入', ico: '⇪', color: '#1d4ed8', root: '经 /import + /ingest 推送', enabled: true, consent: 'yes',
     sessions: 0, imported: r.orbita.rowsStored, total: r.orbita.rowsStored, active: r.orbita.rowsStored, lastSync: null, push: true,
-    importing: null, syncing: null, error: null, projects: [] });
+    importing: null, syncing: null, error: null,
+    projects: (r.orbita.groups ?? []).map(g => ({ path: g.path, rawPath: g.path, count: g.found, stored: g.found, sessions: g.sessions, last: g.lastTs, excluded: false })) });
   return list.filter(s => s.id !== 'orbita' || s.imported > 0);
 }
 async function refreshLive(announce) {
@@ -837,6 +840,12 @@ async function liveAction(a, t) {
         state.expanded = state.expanded === key ? null : key;
         render();
         if (state.expanded === key) await loadSessions(key);
+        return true;
+      }
+      case 'fold-src': {
+        const cur = state.collapsedSrc[t.dataset.id] ?? ((src(t.dataset.id)?.projects.length ?? 0) > 5);
+        state.collapsedSrc[t.dataset.id] = !cur;
+        render();
         return true;
       }
       case 'retry': await api('/local/import', { source: id, mode: 'sync' }); break;
@@ -945,7 +954,7 @@ async function liveAction(a, t) {
   await refreshLive(false);
   return true;
 }
-const LIVE_ACTIONS = new Set(['next-import-all', 'engine-mode', 'user-key-save', 'user-key-delete', 'prewarm-start', 'prewarm-stop', 'hosted-activate', 'hosted-revoke', 'import', 'sync', 'sync-all', 'decline', 'toggle-src', 'clear', 'exclude', 'exclude-session', 'expand', 'retry', 'cancel-import', 'save', 'test-endpoint', 'wipe', 'app-switch', 'endpoint-mode']);
+const LIVE_ACTIONS = new Set(['next-import-all', 'engine-mode', 'user-key-save', 'user-key-delete', 'prewarm-start', 'prewarm-stop', 'hosted-activate', 'hosted-revoke', 'import', 'sync', 'sync-all', 'decline', 'toggle-src', 'clear', 'exclude', 'exclude-session', 'expand', 'fold-src', 'retry', 'cancel-import', 'save', 'test-endpoint', 'wipe', 'app-switch', 'endpoint-mode']);
 
 /* ================= 交互 ================= */
 const IMPORT_MS = 8000, SYNC_MS = 1200;
@@ -997,6 +1006,10 @@ document.addEventListener('click', e => {
       state.armed = null; Object.assign(s, { imported: 0, enabled: false, lastSync: null }); toast(`已清空 ${s.name} 在 intent-lab 里的数据`); break;
     case 'disarm': state.armed = null; break;
     case 'expand': state.expanded = state.expanded === t.dataset.key ? null : t.dataset.key; break;
+    case 'fold-src': {
+      const cur = state.collapsedSrc[t.dataset.id] ?? ((src(t.dataset.id)?.projects.length ?? 0) > 5);
+      state.collapsedSrc[t.dataset.id] = !cur; break;
+    }
     case 'exclude': {
       e.stopPropagation();
       const p = src(t.dataset.src).projects.find(x => x.path === t.dataset.path);
