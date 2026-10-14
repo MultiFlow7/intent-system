@@ -338,7 +338,8 @@ function guideCard() {
   const un = state.sources.filter(s => s.consent !== 'no' && s.total > 0 && !s.imported);
   const importing = state.sources.find(s => s.importing);
   const pw = state.prewarm;
-  const warmEnough = !pw || !pw.available || pwPct(pw) >= 0.9999;
+  const noPrewarm = pw && pw.notApplicable;
+  const warmEnough = noPrewarm || !pw || !pw.available || pwPct(pw) >= 0.9999;
   if (!granted) return ''; // 未激活时整个概览被向导页替换，不会走到这（兜底）
   if (un.length) {
     const total = un.reduce((t, s) => t + s.total, 0);
@@ -347,23 +348,23 @@ function guideCard() {
     const est = secs >= 90 ? `约 ${Math.ceil(secs / 60)} 分钟` : `约 ${Math.max(1, Math.ceil(secs))} 秒`;
     return `
   <div class="card pad" style="margin-bottom:14px;border-color:var(--accent)">
-    <div class="row" style="gap:8px"><span class="faint">① 激活 · 已完成</span><span class="src-name">② 导入并开始预热</span></div>
-    <p class="sub" style="margin:8px 0 6px">把下面的历史对话导入本机（只存这台电脑），导入后服务器会自动做一次缓存预热：</p>
+    <div class="row" style="gap:8px"><span class="faint">① 激活 · 已完成</span><span class="src-name">② ${noPrewarm ? '导入' : '导入并开始预热'}</span></div>
+    <p class="sub" style="margin:8px 0 6px">把下面的历史对话导入本机（只存这台电脑）${noPrewarm ? '。当前模型端点不需要缓存预热，导入完成即可用：' : '，导入后服务器会自动做一次缓存预热：'}</p>
     ${un.map(s => `<div class="row" style="gap:8px;margin:2px 0"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${s.color}"></span><b>${s.name}</b>：找到 <b>${n(s.total)}</b> 条 · ${n(s.sessions)} 个会话</div>`).join('')}
-    <p class="sub">首次预热预计<b>${est}</b>（约 ${n(total)} 条，按每秒 ${rate >= 10 ? Math.round(rate) : rate.toFixed(1)} 条）。可以先按项目排除不想要的部分再导入。</p>
+    ${noPrewarm ? '' : `<p class="sub">首次预热预计<b>${est}</b>（约 ${n(total)} 条，按每秒 ${rate >= 10 ? Math.round(rate) : rate.toFixed(1)} 条）。可以先按项目排除不想要的部分再导入。</p>`}
     <div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap">
       ${importing
         ? `<span class="tag acc">正在导入${importing.progressText ? `：${importing.progressText}` : ''}…</span>`
-        : `<button class="btn primary" data-action="next-import-all">导入并开始预热</button>
+        : `<button class="btn primary" data-action="next-import-all">${noPrewarm ? '导入' : '导入并开始预热'}</button>
            <a class="btn ghost" href="#sources">先按项目排除</a>`}
     </div>
   </div>`;
   }
-  if (state.config && state.config.engine === 'deepseek-own') {
+  if ((state.config && state.config.engine === 'deepseek-own') || noPrewarm) {
     return `
   <div class="card pad" style="margin-bottom:14px">
     <div class="row" style="gap:8px"><span class="faint">① 激活 · 已完成　② 导入 · 已完成</span><span class="src-name">③ 就绪</span></div>
-    <p class="sub" style="margin:8px 0 6px">自己配置（DeepSeek）模式不需要缓存预热——导入完成即可在 Claude Code 里提问。</p>
+    <p class="sub" style="margin:8px 0 6px">${noPrewarm && !(state.config && state.config.engine === 'deepseek-own') ? '当前模型端点不需要缓存预热——导入完成即可用。' : '自己配置（DeepSeek）模式不需要缓存预热——导入完成即可在 Claude Code 里提问。'}</p>
   </div>`;
   }
   if (!warmEnough) {
@@ -450,6 +451,15 @@ const etaText = ms => (ms == null ? '' : ms < 90_000 ? '不到 2 分钟' : ms < 
 /** 缓存预热卡（来源页顶部）：同步完自动开始，不留到对话里 */
 function prewarmCard() {
   const pw = state.prewarm;
+  // 不适用（自己 API 不走服务器缓存）：显示一张说明卡，和「导入」在视觉上也是两件事
+  if (pw && pw.notApplicable) {
+    return `<section class="card" style="margin-bottom:12px">
+    <div class="src-head">
+      <span class="src-ico" style="background:var(--accent-soft);color:var(--accent)">⚡</span>
+      <div style="min-width:0;flex:1"><div class="row" style="gap:8px"><span class="src-name">缓存预热</span><span class="tag">不需要</span></div>
+        <div class="faint" style="margin-top:2px;font-size:12.5px">${esc(pw.reason || '当前模型端点不需要预热')}——导入归导入，导入完成即可用。</div></div>
+    </div></section>`;
+  }
   if (!pw || !pw.available) return '';
   const run = pwRunning(pw);
   const noData = !pw.coverage || !pw.coverage.segs; // 还没导入任何历史：没有段可热，别显示 100%
