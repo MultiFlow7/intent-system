@@ -257,6 +257,10 @@ describe("/local/*", () => {
     await post("/local/settings", { source: "claude", enabled: false });
     expect(await visible()).toBe(1);
     await post("/local/settings", { source: "claude", enabled: true });
+    // 推送 / 导入的行不支持排除：给明确的 400，不动状态
+    const pushed = await post("/local/exclude", { source: "orbita", project: "Orbita / MCP 推送", excluded: true });
+    expect(pushed.status).toBe(400);
+    expect(((await pushed.json()) as { error: string }).error).toContain("不支持");
     expect(await visible()).toBe(4);
   });
 

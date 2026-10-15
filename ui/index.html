@@ -533,11 +533,12 @@ function pageSources() {
           <thead><tr><th>项目 / 目录</th><th class="num">会话</th><th class="num">条数</th><th>最近活动</th><th></th></tr></thead>
           <tbody>${s.projects.map(p => {
             const key = `${s.id}|${p.path}`, sess = state.sessionsOf[key] ?? (LIVE.on && (!s.push || s.projects.length) ? 'lazy' : undefined), open = state.expanded === key;
-            return `<tr class="${p.excluded ? 'excluded' : ''} ${sess ? 'click' : ''}" ${sess ? `data-action="expand" data-key="${esc(key)}"` : ''}>              <td class="mono"><span class="faint" style="display:inline-block;width:14px">${sess ? (open ? '▾' : '▸') : ''}</span>${esc(p.path)}</td>
+            return `<tr class="${p.excluded ? 'excluded' : ''} ${sess ? 'click' : ''}" ${sess ? `data-action="expand" data-key="${esc(key)}"` : ''}>
+              <td class="mono"><span class="faint" style="display:inline-block;width:14px">${sess ? (open ? '▾' : '▸') : ''}</span>${esc(p.path)}</td>
               <td class="num muted">${p.sessions || '—'}</td><td class="num">${n(p.excluded ? (p.origCount ?? p.count) : p.count)}${p.stored != null && p.stored < p.count ? `<div class="faint" style="font-size:11.5px">已入库 ${n(p.stored)}</div>` : ''}</td><td class="muted">${rel(p.last)}</td>
-              <td style="text-align:right"><button class="btn sm ${p.excluded ? '' : 'ghost'}" data-action="exclude" data-src="${s.id}" data-path="${esc(p.path)}">${p.excluded ? '恢复' : '排除'}</button></td></tr>
+              <td style="text-align:right">${s.push ? '' : `<button class="btn sm ${p.excluded ? '' : 'ghost'}" data-action="exclude" data-src="${s.id}" data-path="${esc(p.path)}">${p.excluded ? '恢复' : '排除'}</button>`}</td></tr>
               ${open && sess === 'lazy' ? '<tr class="sub-rows"><td colspan="5" class="faint">加载中…</td></tr>' : ''}${open && Array.isArray(sess) ? sess.map((x, i) => `<tr class="sub-rows ${x.excluded ? 'excluded' : ''}"><td>${esc(x.title)}</td><td></td><td class="num">${x.count}${x.stored != null && x.stored < x.count ? ` <span class="faint">(${x.stored})</span>` : ''}</td><td class="muted">${rel(x.last)}</td>
-                <td style="text-align:right"><button class="btn sm ${x.excluded ? '' : 'ghost'}" data-action="exclude-session" data-key="${esc(key)}" data-i="${i}">${x.excluded ? '恢复' : '排除'}</button></td></tr>`).join('') : ''}`;
+                <td style="text-align:right">${s.push ? '' : `<button class="btn sm ${x.excluded ? '' : 'ghost'}" data-action="exclude-session" data-key="${esc(key)}" data-i="${i}">${x.excluded ? '恢复' : '排除'}</button>`}</td></tr>`).join('') : ''}`;
           }).join('')}</tbody>
         </table></div>`}
       </div>

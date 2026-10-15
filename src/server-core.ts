@@ -1296,6 +1296,8 @@ async function handleLocalSessions(url: URL): Promise<Response> {
 async function handleLocalPost(path: string, raw: unknown): Promise<Response> {
   const b = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const id = b.source;
+  // 推送 / 导入的行（/import /ingest）没有本机文件可排除或重扫，管理页也不给这张卡排除按钮
+  if (id === "orbita") return jsonError(400, "推送 / 导入的行不支持在这里排除或同步");
   if (!isLocalSource(id)) return jsonError(400, "source 必须是 claude、codex 或 proma");
   if (path === "/local/import") {
     const mode = b.mode === "full" ? "full" : "sync";

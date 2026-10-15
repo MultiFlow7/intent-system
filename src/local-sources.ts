@@ -649,7 +649,8 @@ export async function scanSource(id: LocalSourceId, onFile?: (done: number, tota
         parsed = parsePromaSession(raw, file, {
           title: entry?.title ?? null,
           kind: promaKindOf(entry),
-          project: entry?.workspaceId ? (promaWs?.get(entry.workspaceId) ?? entry.workspaceId) : null,
+          // 工作区已删（索引里还挂着 id、agent-workspaces.json 里没有）→ 归「无项目目录」，不显示裸 id
+          project: entry?.workspaceId ? (promaWs?.get(entry.workspaceId) ?? null) : null,
         });
       } else {
         parsed = parseCodexRollout(raw, file, titles);
